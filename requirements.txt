@@ -1,0 +1,10 @@
+torch==2.0.1
+torchvision==0.15.2
+pillow==10.0.0
+flask==3.0.0
+flask-cors==4.0.0
+pytesseract==0.3.10
+google-generativeai==0.3.0
+numpy==1.24.3
+opencv-python==4.8.0.76
+requests==2.31.0

@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Epigraphic Text Restoration</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --stone:       #c8b89a;
+            --stone-light: #e8dfd0;
+            --stone-dark:  #7a6a55;
+            --ink:         #1a1410;
+            --ink-soft:    #3d3128;
+            --amber:       #c97d2e;
+            --amber-light: #f0a84a;
+            --cream:       #faf6f0;
+            --cream-dark:  #f0e8dc;
+            --success:     #3d7a5a;
+            --warn:        #b86020;
+            --danger:      #8b2020;
+            --shadow:      rgba(26,20,16,0.15);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--cream);
+            color: var(--ink);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        header {
+            position: relative;
+            text-align: center;
+            padding: 52px 20px 40px;
+            background: var(--ink);
+            color: var(--stone-light);
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 40px,
+                rgba(200,184,154,0.04) 40px,
+                rgba(200,184,154,0.04) 41px
+            );
+        }
+
+        header::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, transparent, var(--amber), var(--amber-light), var(--amber), transparent);
+        }
+
+        .header-inner { position: relative; z-index: 1; }
+
+        .header-emblem {
+            font-size: 2.8rem;
+            margin-bottom: 12px;
+            display: block;
+            filter: drop-shadow(0 2px 8px rgba(201,125,46,0.4));
+        }
+
+        header h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(1.8rem, 4vw, 2.8rem);
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--stone-light);
+            margin-bottom: 8px;
+        }
+
+        header h1 span { color: var(--amber-light); }
+
+        header p {
+            font-size: 0.95rem;
+            font-weight: 300;
+            color: var(--stone);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 0;
+            min-height: calc(100vh - 160px);
+            position: relative;
+            z-index: 1;
+        }
+
+        .panel-left {
+            background: var(--ink-soft);
+            padding: 36px 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .panel-section-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--stone);
+            margin-bottom: 10px;
+        }
+
+        .upload-zone {
+            border: 2px dashed rgba(200,184,154,0.3);
+            border-radius: 10px;
+            padding: 36px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: rgba(200,184,154,0.04);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-zone:hover,
+        .upload-zone.dragover {
+            border-color: var(--amber);
+            background: rgba(201,125,46,0.08);
+        }
+
+        .upload-zone-icon {
+            font-size: 2.4rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .upload-zone p {
+            color: var(--stone);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .upload-zone strong { color: var(--stone-light); }
+
+        #imageInput { display: none; }
+
+        .preview-wrap {
+            display: none;
+            position: relative;
+        }
+
+        .preview-wrap img {
+            width: 100%;
+            border-radius: 8px;
+            display: block;
+            border: 1px solid rgba(200,184,154,0.2);
+        }
+
+        .preview-badge {
+            position: absolute;
+            top: 8px; left: 8px;
+            background: rgba(26,20,16,0.75);
+            color: var(--stone-light);
+            font-size: 0.7rem;
+            padding: 3px 8px;
+            border-radius: 20px;
+            letter-spacing: 0.05em;
+            backdrop-filter: blur(4px);
+        }
+
+        .btn-process {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, var(--amber) 0%, var(--amber-light) 100%);
+            color: var(--ink);
+            border: none;
+            border-radius: 8px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.02em;
+        }
+
+        .btn-process:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(201,125,46,0.35);
+        }
+
+        .btn-process:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-clear {
+            width: 100%;
+            padding: 10px;
+            background: rgba(200,184,154,0.1);
+            color: var(--stone);
+            border: 1px solid rgba(200,184,154,0.2);
+            border-radius: 8px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: none;
+        }
+
+        .btn-clear:hover { background: rgba(200,184,154,0.2); color: var(--stone-light); }
+
+        .status-bar {
+            padding: 12px 14px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            display: none;
+            font-weight: 500;
+        }
+
+        .status-bar.success { background: rgba(61,122,90,0.2); color: #7ec9a0; border: 1px solid rgba(61,122,90,0.3); display: block; }
+        .status-bar.error   { background: rgba(139,32,32,0.2); color: #e08080; border: 1px solid rgba(139,32,32,0.3); display: block; }
+        .status-bar.info    { background: rgba(201,125,46,0.15); color: var(--amber-light); border: 1px solid rgba(201,125,46,0.3); display: block; }
+
+        .spinner-wrap {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            color: var(--stone);
+            font-size: 0.9rem;
+        }
+
+        .spinner-wrap.active { display: flex; }
+
+        .spinner {
+            width: 20px; height: 20px;
+            border: 2px solid rgba(200,184,154,0.2);
+            border-top-color: var(--amber);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .panel-right {
+            background: var(--cream);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tabs-nav {
+            display: flex;
+            border-bottom: 1px solid var(--stone-light);
+            background: var(--cream-dark);
+            padding: 0 32px;
+        }
+
+        .tab-btn {
+            padding: 16px 20px;
+            background: none;
+            border: none;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--stone-dark);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            letter-spacing: 0.03em;
+        }
+
+        .tab-btn:hover { color: var(--ink); }
+        .tab-btn.active { color: var(--amber); border-bottom-color: var(--amber); font-weight: 600; }
+
+        .tabs-body { flex: 1; overflow-y: auto; }
+
+        .tab-panel { display: none; padding: 32px; }
+        .tab-panel.active { display: block; }
+
+        .field { margin-bottom: 24px; }
+
+        .field-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--stone-dark);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .field-label .dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--amber);
+        }
+
+        textarea.field-input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid var(--stone-light);
+            border-radius: 8px;
+            background: white;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.88rem;
+            color: var(--ink);
+            resize: vertical;
+            min-height: 120px;
+            line-height: 1.6;
+            transition: border-color 0.2s;
+        }
+
+        textarea.field-input:focus {
+            outline: none;
+            border-color: var(--amber);
+        }
+
+        .score-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 16px 20px;
+            background: var(--cream-dark);
+            border-radius: 10px;
+            border: 1px solid var(--stone-light);
+            margin-bottom: 20px;
+        }
+
+        .score-label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--stone-dark);
+            flex: 1;
+        }
+
+        .score-badge {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.4rem;
+            font-weight: 700;
+            padding: 6px 18px;
+            border-radius: 30px;
+        }
+
+        .score-badge.high   { background: rgba(61,122,90,0.12); color: var(--success); border: 1px solid rgba(61,122,90,0.3); }
+        .score-badge.medium { background: rgba(184,96,32,0.12); color: var(--warn);    border: 1px solid rgba(184,96,32,0.3); }
+        .score-badge.low    { background: rgba(139,32,32,0.12); color: var(--danger);  border: 1px solid rgba(139,32,32,0.3); }
+
+        .score-bar-wrap {
+            flex: 2;
+            height: 6px;
+            background: var(--stone-light);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .score-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.8s ease;
+            background: linear-gradient(90deg, var(--amber), var(--amber-light));
+        }
+
+        .char-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+            gap: 8px;
+        }
+
+        .char-tile {
+            background: white;
+            border: 1px solid var(--stone-light);
+            border-radius: 8px;
+            padding: 10px 6px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .char-tile:hover {
+            border-color: var(--amber);
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+
+        .char-tile .char { font-size: 1.5rem; line-height: 1; color: var(--ink); }
+        .char-tile .conf { font-size: 0.65rem; color: var(--stone-dark); margin-top: 4px; font-family: 'DM Mono', monospace; }
+
+        .gemini-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .gemini-card {
+            background: white;
+            border: 1px solid var(--stone-light);
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        .gemini-card.full { grid-column: 1 / -1; }
+
+        .gemini-card-label {
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--stone-dark);
+            margin-bottom: 8px;
+        }
+
+        .gemini-card-value {
+            font-size: 0.92rem;
+            color: var(--ink);
+            line-height: 1.55;
+        }
+
+        .gemini-card-value.mono {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.85rem;
+        }
+
+        .gemini-script-badge {
+            display: inline-block;
+            background: rgba(201,125,46,0.12);
+            color: var(--amber);
+            border: 1px solid rgba(201,125,46,0.3);
+            border-radius: 20px;
+            padding: 4px 14px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .gemini-confidence-ring {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .confidence-num {
+            font-family: 'Playfair Display', serif;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--amber);
+        }
+
+        .bottom-bar {
+            border-top: 1px solid var(--stone-light);
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--cream-dark);
+        }
+
+        .btn-export, .btn-copy {
+            padding: 10px 22px;
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: none;
+        }
+
+        .btn-export {
+            background: var(--ink);
+            color: var(--stone-light);
+            border: none;
+        }
+
+        .btn-export:hover { background: var(--ink-soft); transform: translateY(-1px); }
+
+        .btn-copy {
+            background: white;
+            color: var(--ink);
+            border: 1px solid var(--stone-light);
+        }
+
+        .btn-copy:hover { background: var(--cream-dark); }
+
+        .final-text-wrap {
+            border-top: 1px solid var(--stone-light);
+            padding: 32px;
+            background: white;
+        }
+
+        .final-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .final-label-text {
+            font-family: 'Playfair Display', serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--ink);
+        }
+
+        .final-restored-badge {
+            background: rgba(61,122,90,0.1);
+            color: var(--success);
+            font-size: 0.68rem;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 20px;
+            border: 1px solid rgba(61,122,90,0.25);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        textarea.final-textarea {
+            width: 100%;
+            padding: 16px;
+            border: 1px solid var(--stone-light);
+            border-radius: 8px;
+            background: var(--cream);
+            font-family: 'DM Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--ink);
+            resize: vertical;
+            min-height: 100px;
+            line-height: 1.7;
+        }
+
+        textarea.final-textarea:focus { outline: none; border-color: var(--amber); }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--stone);
+        }
+
+        .empty-icon { font-size: 2.5rem; margin-bottom: 10px; opacity: 0.4; }
+        .empty-text { font-size: 0.9rem; opacity: 0.6; }
+
+        @media (max-width: 900px) {
+            .layout { grid-template-columns: 1fr; }
+            .panel-left { padding: 24px 20px; }
+            .tab-panel, .final-text-wrap, .bottom-bar { padding: 20px; }
+        }
+
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-in { animation: fadeSlideIn 0.4s ease forwards; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-inner">
+        <span class="header-emblem"></span>
+        <h1>Epigraphic <span>Text Restoration</span></h1>
+        <p>AI-Driven Restoration of Ancient Stone Inscriptions</p>
+    </div>
+</header>
+
+<div class="layout">
+    <div class="panel-left">
+        <div>
+            <div class="panel-section-label">Upload Inscription</div>
+            <div class="upload-zone" id="uploadZone">
+                <span class="upload-zone-icon"></span>
+                <p><strong>Click to upload</strong> or drag & drop</p>
+                <p style="margin-top:4px; font-size:0.8rem; opacity:0.6;">PNG · JPG · GIF · up to 10MB</p>
+            </div>
+            <input type="file" id="imageInput" accept="image/*">
+        </div>
+
+        <div class="preview-wrap" id="previewWrap">
+            <div class="panel-section-label">Preview</div>
+            <div style="position:relative">
+                <img id="previewImage" alt="Inscription preview">
+                <div class="preview-badge">Inscription loaded</div>
+            </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            <button class="btn-process" id="processBtn" disabled> &nbsp;Process Image</button>
+            <button class="btn-clear" id="clearBtn">✕ &nbsp;Clear</button>
+        </div>
+
+        <div class="spinner-wrap" id="spinnerWrap">
+            <div class="spinner"></div>
+            <span>Analysing inscription…</span>
+        </div>
+
+        <div class="status-bar" id="statusBar"></div>
+    </div>
+
+    <div class="panel-right">
+        <nav class="tabs-nav">
+            <button class="tab-btn active" data-tab="tab-ocr">OCR Text</button>
+            <button class="tab-btn" data-tab="tab-cnn">Character Score</button>
+            <button class="tab-btn" data-tab="tab-gemini">Gemini Analysis</button>
+        </nav>
+
+        <div class="tabs-body">
+            <div id="tab-ocr" class="tab-panel active">
+                <div id="ocrEmpty" class="empty-state">
+                    <div class="empty-icon"></div>
+                    <div class="empty-text">Upload and process an image to extract text</div>
+                </div>
+                <div id="ocrContent" style="display:none">
+                    <div class="field">
+                        <div class="field-label"><div class="dot"></div> Extracted Text (Tesseract OCR)</div>
+                        <textarea class="field-input" id="ocrText" readonly rows="8"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-cnn" class="tab-panel">
+                <div id="cnnEmpty" class="empty-state">
+                    <div class="empty-icon"></div>
+                    <div class="empty-text">Character recognition score will appear here</div>
+                </div>
+                <div id="cnnContent" style="display:none">
+                    <div class="score-row" style="margin-bottom:12px; border-left:4px solid var(--amber);">
+                        <div class="score-label">AI Epigraphic Confidence<br><small style="font-weight:400;font-size:0.7em;opacity:0.7">Gemini Vision</small></div>
+                        <div class="score-bar-wrap"><div class="score-bar-fill" id="geminiBarFill" style="width:0%"></div></div>
+                        <div class="score-badge" id="geminiBadge">--%</div>
+                    </div>
+                    <div style="background:var(--cream-dark); border-radius:8px; padding:14px 16px; margin-bottom:16px; border:1px solid var(--stone-light);">
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                            <div class="score-label" style="margin:0;">CNN Character Score</div>
+                            <div class="score-badge" id="scoreBadge" style="font-size:1rem; padding:3px 12px;">--%</div>
+                        </div>
+                        <div id="cnnNote" style="font-size:0.78rem; color:var(--stone-dark); line-height:1.5;">CNN score on raw stone image</div>
+                    </div>
+                    <div class="field-label"><div class="dot"></div>Recognised Character Patches</div>
+                    <div class="char-grid" id="charGrid"></div>
+                </div>
+            </div>
+
+            <div id="tab-gemini" class="tab-panel">
+                <div id="geminiEmpty" class="empty-state">
+                    <div class="empty-icon"></div>
+                    <div class="empty-text">AI epigraphic analysis will appear here</div>
+                </div>
+                <div id="geminiContent" style="display:none" class="animate-in">
+                    <div class="gemini-grid">
+                        <div class="gemini-card">
+                            <div class="gemini-card-label">Script Type</div>
+                            <div class="gemini-card-value"><span class="gemini-script-badge" id="gScriptType">—</span></div>
+                        </div>
+                        <div class="gemini-card">
+                            <div class="gemini-card-label">AI Confidence</div>
+                            <div class="gemini-confidence-ring">
+                                <div class="confidence-num" id="gConfidence">—</div>
+                                <div style="font-size:0.8rem;color:var(--stone-dark);line-height:1.3">out of 100</div>
+                            </div>
+                        </div>
+                        <div class="gemini-card full">
+                            <div class="gemini-card-label">Transcription</div>
+                            <div class="gemini-card-value mono" id="gTranscription">—</div>
+                        </div>
+                        <div class="gemini-card full">
+                            <div class="gemini-card-label">IAST Transliteration</div>
+                            <div class="gemini-card-value mono" id="gTranslit">—</div>
+                        </div>
+                        <div class="gemini-card full">
+                            <div class="gemini-card-label">English Translation</div>
+                            <div class="gemini-card-value" id="gTranslation">—</div>
+                        </div>
+                        <div class="gemini-card full">
+                            <div class="gemini-card-label">Damage Analysis</div>
+                            <div class="gemini-card-value" id="gDamage">—</div>
+                        </div>
+                        <div class="gemini-card full">
+                            <div class="gemini-card-label">Restoration Notes</div>
+                            <div class="gemini-card-value" id="gNotes">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="final-text-wrap">
+            <div class="final-label">
+                <div class="final-label-text">Final Restored Text</div>
+                <div class="final-restored-badge">AI Restored</div>
+            </div>
+            <textarea class="final-textarea" id="finalText" readonly placeholder="Final restored inscription text will appear here after processing…"></textarea>
+        </div>
+
+        <div class="bottom-bar">
+            <button class="btn-export" id="exportBtn">Export</button>
+            <button class="btn-copy" id="copyBtn">Copy Text</button>
+        </div>
+    </div>
+</div>
+
+<script>
+console.log('Page loaded');
+
+const uploadZone  = document.getElementById('uploadZone');
+const imageInput  = document.getElementById('imageInput');
+const previewWrap = document.getElementById('previewWrap');
+const previewImg  = document.getElementById('previewImage');
+const processBtn  = document.getElementById('processBtn');
+const clearBtn    = document.getElementById('clearBtn');
+const spinnerWrap = document.getElementById('spinnerWrap');
+const statusBar   = document.getElementById('statusBar');
+
+let selectedFile = null;
+
+uploadZone.addEventListener('click', () => imageInput.click());
+
+uploadZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    uploadZone.classList.add('dragover');
+});
+
+uploadZone.addEventListener('dragleave', () => {
+    uploadZone.classList.remove('dragover');
+});
+
+uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    handleFiles(e.dataTransfer.files);
+});
+
+imageInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(files) {
+    if (!files || !files.length) {
+        showStatus('No file selected', 'error');
+        return;
+    }
+    
+    const f = files[0];
+    if (!f.type.startsWith('image/')) {
+        showStatus(' Please upload an image file', 'error');
+        return;
+    }
+
+    selectedFile = f;
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+        previewImg.src = e.target.result;
+        previewWrap.style.display = 'block';
+        processBtn.disabled = false;
+        clearBtn.style.display = 'block';
+        showStatus(`✓ Image loaded: ${f.name}`, 'success');
+    };
+
+    reader.onerror = () => showStatus(' Failed to read file', 'error');
+
+    reader.readAsDataURL(f);
+}
+
+clearBtn.addEventListener('click', () => {
+    selectedFile = null;
+    imageInput.value = '';
+    previewWrap.style.display = 'none';
+    processBtn.disabled = true;
+    clearBtn.style.display = 'none';
+    clearResults();
+    showStatus('', '');
+});
+
+processBtn.addEventListener('click', async () => {
+    if (!selectedFile) {
+        showStatus(' No file selected', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('image', selectedFile);
+
+    spinnerWrap.classList.add('active');
+    processBtn.disabled = true;
+    showStatus('Processing inscription…', 'info');
+
+    try {
+        const res = await fetch('/api/upload-and-process', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await res.json();
+        console.log('Response:', data);
+
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Processing failed');
+        }
+
+        displayResults(data);
+        showStatus('Success!', 'success');
+
+    } catch(err) {
+        console.error('Error:', err);
+        showStatus(` Error: ${err.message}`, 'error');
+    } finally {
+        spinnerWrap.classList.remove('active');
+        processBtn.disabled = false;
+    }
+});
+
+function displayResults(data) {
+    // OCR
+    document.getElementById('ocrEmpty').style.display = 'none';
+    document.getElementById('ocrContent').style.display = 'block';
+    document.getElementById('ocrText').value = data.ocr_text || 'No text extracted';
+
+    // CNN + Gemini
+    document.getElementById('cnnEmpty').style.display = 'none';
+    document.getElementById('cnnContent').style.display = 'block';
+
+    const geminiConf = data.gemini_analysis?.confidence || 0;
+    const rawCnnScore = data.model_validation?.accuracy || 0;
+
+    const gBadge = document.getElementById('geminiBadge');
+    const gFill = document.getElementById('geminiBarFill');
+    gBadge.textContent = geminiConf + '%';
+    gFill.style.width = geminiConf + '%';
+    gBadge.classList.remove('high','medium','low');
+    if (geminiConf >= 70) gBadge.classList.add('high');
+    else if (geminiConf >= 40) gBadge.classList.add('medium');
+    else gBadge.classList.add('low');
+
+    const badge = document.getElementById('scoreBadge');
+    badge.textContent = rawCnnScore + '%';
+    badge.classList.remove('high','medium','low');
+    if (rawCnnScore >= 70) badge.classList.add('high');
+    else if (rawCnnScore >= 40) badge.classList.add('medium');
+    else badge.classList.add('low');
+
+    // Character grid
+    const grid = document.getElementById('charGrid');
+    const preds = data.model_validation?.character_predictions || [];
+    if (preds.length) {
+        grid.innerHTML = preds.map(p => `
+            <div class="char-tile">
+                <div class="char">${p.predicted_char || '?'}</div>
+                <div class="conf">${((p.confidence||0)*100).toFixed(0)}%</div>
+            </div>
+        `).join('');
+    }
+
+    // Gemini
+    const g = data.gemini_analysis || {};
+    document.getElementById('geminiEmpty').style.display = 'none';
+    document.getElementById('geminiContent').style.display = 'block';
+    document.getElementById('gScriptType').textContent = g.script_type || 'Unknown';
+    document.getElementById('gConfidence').textContent = (g.confidence || 0) + '%';
+    document.getElementById('gTranscription').textContent = g.transcription || '—';
+    document.getElementById('gTranslit').textContent = g.transliteration || '—';
+    document.getElementById('gTranslation').textContent = g.translation || '—';
+    document.getElementById('gDamage').textContent = g.damage_analysis || '—';
+    document.getElementById('gNotes').textContent = g.restoration_notes || '—';
+
+    // Final
+    document.getElementById('finalText').value = data.final_restored_text || data.ocr_text || '';
+
+    // Export buttons
+    document.getElementById('exportBtn').style.display = 'block';
+    document.getElementById('copyBtn').style.display = 'block';
+}
+
+function clearResults() {
+    ['ocrContent','cnnContent','geminiContent'].forEach(id => document.getElementById(id).style.display = 'none');
+    ['ocrEmpty','cnnEmpty','geminiEmpty'].forEach(id => document.getElementById(id).style.display = 'block');
+    document.getElementById('finalText').value = '';
+    document.getElementById('exportBtn').style.display = 'none';
+    document.getElementById('copyBtn').style.display = 'none';
+}
+
+function showStatus(msg, type) {
+    statusBar.textContent = msg;
+    statusBar.className = 'status-bar' + (type ? ' ' + type : '');
+}
+
+// Tabs
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const target = btn.dataset.tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(target).classList.add('active');
+    });
+});
+
+// Export / Copy
+document.getElementById('exportBtn').addEventListener('click', () => {
+    const text = document.getElementById('finalText').value;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'restored_inscription.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+});
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+    const ta = document.getElementById('finalText');
+    ta.select();
+    document.execCommand('copy');
+    showStatus('✓ Copied to clipboard!', 'success');
+});
+</script>
+
+</body>
+</html>
